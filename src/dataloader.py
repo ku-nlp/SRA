@@ -112,69 +112,69 @@ def spilt_dataset(datapath, phase, entity_list, nb_class_fg, nb_class_pg, schema
     split_cnt_dict = {}
     inputs_dict, y_dict = {}, {}
 
-    num_all_samples = len(all_x) # 句子数量
-    while entity_idx<len(entity_list): # 遍历当前所有实体
+    num_all_samples = len(all_x) # Number of sentences
+    while entity_idx<len(entity_list): # Iterate over all current entities
         if entity_idx==0:
-            split_name = '%d_%d'%(entity_idx, entity_idx+nb_class_fg-1) # 第一个split名字 即base
+            split_name = '%d_%d'%(entity_idx, entity_idx+nb_class_fg-1) # First split name, i.e. base
             split_name_list.append(split_name)
-            split_cnt_dict[split_name] = int(num_all_samples*(nb_class_fg/len(entity_list))) # 第一个split的 句子数量  按实体比例划分
+            split_cnt_dict[split_name] = int(num_all_samples*(nb_class_fg/len(entity_list))) # Number of sentences in the first split, allocated by entity ratio
             for i in range(entity_idx,entity_idx+nb_class_fg):
-                entity_2_split[i]=split_name # 该split包含的实体索引
-            entity_idx = entity_idx+nb_class_fg # 下一个split的开始实体对应索引
+                entity_2_split[i]=split_name # Entity indices contained in this split
+            entity_idx = entity_idx+nb_class_fg # Starting entity index of the next split
         else:
-            split_name = '%d_%d'%(entity_idx, entity_idx+nb_class_pg-1) # 其余split的名字
+            split_name = '%d_%d'%(entity_idx, entity_idx+nb_class_pg-1) # Names of the remaining splits
             split_name_list.append(split_name)
-            split_cnt_dict[split_name] = int(num_all_samples*(nb_class_pg/len(entity_list))) # split 包含的句子数量
-            for i in range(entity_idx,entity_idx+nb_class_pg): # 该split包含的实体索引
+            split_cnt_dict[split_name] = int(num_all_samples*(nb_class_pg/len(entity_list))) # Number of sentences in the split
+            for i in range(entity_idx,entity_idx+nb_class_pg): # Entity indices contained in this split
                 entity_2_split[i]=split_name
-            entity_idx = entity_idx+nb_class_pg # 下一个split的开始实体对应索引
+            entity_idx = entity_idx+nb_class_pg # Starting entity index of the next split
     
     for split_name in split_name_list:
         inputs_dict[split_name], y_dict[split_name] = [], []
 
     # Sorted by the frequency
-    label_count_train = get_label_distribution(all_y, label_list, count=True) # 每个实体 出现的频率
+    label_count_train = get_label_distribution(all_y, label_list, count=True) # Frequency of each entity
     # entity_label_list = sorted(label_count_train, key=lambda x:label_count_train[x])
 
-    for x_sent, y_sent in zip(all_x, all_y): # 遍历数据集的每个预处理后的句子及其label
-        # 当前句子 包含的实体类型索引（label索引 转 实体索引） （排除O 和 其余子词和cls sep的label索引）
+    for x_sent, y_sent in zip(all_x, all_y): # Iterate over each preprocessed sentence and its labels
+        # Entity type indices contained in the current sentence (label index to entity index), excluding O and padding labels for subwords, cls, and sep
         entity_set = list(set([(i-1)//(len(schema)-1) for i in list(set(y_sent)-set([0,-100]))]))
-        # 根据数据集中每个实体的频率 对当前句子包含的实体 进行排序 (从小到大排序 优先分配低频实体)
+        # Sort entities in the current sentence by frequency in the dataset, from low to high, prioritizing low-frequency entities
         sorted_entity_set = sorted(entity_set, key=lambda x:label_count_train[entity_list[x]])
         is_break = False
-        for entity_idx in sorted_entity_set: # 遍历当前句子排序后的每个实体
-            split_name = entity_2_split[entity_idx] # 该实体属于的split
-            if split_cnt_dict[split_name]>0: # 当前split 还未满容量， 否则换下一实体 对应的split
-                # 把当前的句子 划分给 该split
+        for entity_idx in sorted_entity_set: # Iterate over each sorted entity in the current sentence
+            split_name = entity_2_split[entity_idx] # Split that this entity belongs to
+            if split_cnt_dict[split_name]>0: # Current split still has capacity; otherwise try the next entity's split
+                # Assign the current sentence to this split
                 inputs_dict[split_name].append(x_sent)
                 y_dict[split_name].append(y_sent)
-                split_cnt_dict[split_name] -= 1 # 当前split的容量-1
-                is_break = True # 当前句子已经分配 不能再分配给其他split  每个split disjoint
+                split_cnt_dict[split_name] -= 1 # Decrease current split capacity by 1
+                is_break = True # Current sentence has been assigned and cannot be assigned to other splits; each split is disjoint
                 break
-        if not is_break: # 当前句子不包含任何实体 或者 包含的实体 对应的split全都满容量了
+        if not is_break: # Current sentence contains no entity, or all corresponding splits are full
             not_full_split = []
-            for k,v in split_cnt_dict.items(): # 找出 所有未满容量的split 名字
+            for k,v in split_cnt_dict.items(): # Find all split names with remaining capacity
                 if v>0:
                     not_full_split.append(k)
-            if len(not_full_split)>0: # 有找到
-                split_name = np.random.choice(not_full_split) # 随机选择一个未满容量的split
-                # 把当前句子 分配给该split
+            if len(not_full_split)>0: # Found one
+                split_name = np.random.choice(not_full_split) # Randomly choose a split with remaining capacity
+                # Assign the current sentence to this split
                 inputs_dict[split_name].append(x_sent)
                 y_dict[split_name].append(y_sent)
-                # 该split 容量-1
+                # Decrease this split's capacity by 1
                 split_cnt_dict[split_name] -= 1
                 
     # print([len(v) for k,v in inputs_dict.items()])
     # print([len(v) for k,v in y_dict.items()])
 
-    if isinstance(datapath,list): # 划分后的数据集名字
+    if isinstance(datapath,list): # Name of the split dataset
         data_ckpt = os.path.join(datapath[0],'train_fg_%d_pg_%d.pth'%(nb_class_fg,nb_class_pg))
     else:
         data_ckpt = os.path.join(datapath,'train_fg_%d_pg_%d.pth'%(nb_class_fg,nb_class_pg))
     
     logger.info('Saving data to %s...'%data_ckpt)
     with open(data_ckpt, "wb") as f:
-        pickle.dump((inputs_dict, y_dict), f) # 保存数据集(训练集)划分后的 每个split及其对应的句子（输入token id 和 输出label 索引）
+        pickle.dump((inputs_dict, y_dict), f) # Save each split and its corresponding sentences (input token ids and output label indices) after splitting the training dataset
 
 def convert_BIOES_to_BIO(in_datapath, out_datapath):
     with open(out_datapath, "w", encoding='utf-8') as f_out:
@@ -232,7 +232,7 @@ def get_default_label_list(entity_list, schema='BIO'):
 
 def read_ner(datapath, phase, label_list):
 
-    # 原始数据集路径
+    # Original dataset path
     if isinstance(datapath,list):
         if len(datapath)>1 and phase!="train":
             logger.warning("In %s phase, more than one domain data are combined!!!"%(phase))
@@ -243,24 +243,24 @@ def read_ner(datapath, phase, label_list):
     inputs, ys = [], []
     for _datapath in data_path_lst:
         _inputs, _ys = [], []
-        data_ckpt = _datapath[:-4]+'.pth' # 分割后的数据集
-        if os.path.isfile(data_ckpt): # 有处理好的直接加载
+        data_ckpt = _datapath[:-4]+'.pth' # Split dataset
+        if os.path.isfile(data_ckpt): # Load directly if preprocessed data exists
             logger.info('Loading data from %s...'%data_ckpt)
             with open(data_ckpt, "rb") as f:
                 _inputs, _ys = pickle.load(f)
             inputs.append(_inputs)
             ys.append(_ys)
             continue
-        with open(_datapath, "r", encoding="utf-8") as fr: # 读取数据集
+        with open(_datapath, "r", encoding="utf-8") as fr: # Read dataset
             token_list, y_list = [], []
-            for i, line in enumerate(fr): # 遍历每一行
+            for i, line in enumerate(fr): # Iterate over each line
                 line = line.strip() 
-                if line == "": # 遇到空行，一句话结束
-                    if len(token_list) > 0: # 避免多个空行的情况
+                if line == "": # Empty line marks the end of a sentence
+                    if len(token_list) > 0: # Avoid multiple consecutive empty lines
                         assert len(token_list) == len(y_list)
-                        # 该句话首尾 添加 cls id =101 和 sep id = 102
+                        # Add cls id = 101 and sep id = 102 to the sentence boundaries
                         _inputs.append([auto_tokenizer.cls_token_id] + token_list + [auto_tokenizer.sep_token_id])
-                        # cls sep 对应填充label -100
+                        # Fill cls and sep labels with -100
                         _ys.append([pad_token_label_id] + y_list + [pad_token_label_id])
 
                     token_list, y_list = [], []
@@ -269,22 +269,22 @@ def read_ner(datapath, phase, label_list):
                 token = splits[0] 
                 label = splits[1]
 
-                subs_ = auto_tokenizer.tokenize(token) # bert分词器 切分 子词
+                subs_ = auto_tokenizer.tokenize(token) # BERT tokenizer splits subwords
                 if len(subs_) > 0:
-                    # 标签转索引 若原始token被切分为多个子词，则第一个子词对应原始token的label 其余子词对应填充label -100
+                    # Convert label to index; if the original token is split into subwords, the first subword uses the original label and the rest use -100
                     y_list.extend([label_list.index(label)] + [pad_token_label_id] * (len(subs_) - 1)) 
-                    # 将子词转为id
+                    # Convert subwords to ids
                     token_list.extend(auto_tokenizer.convert_tokens_to_ids(subs_))
                 else:
                     print("length of subwords for %s is zero; its label is %s" % (token, label))
 
-        inputs.append(_inputs) # 追加数据集的处理结果 [[[第一句话],[],...,[]]]
+        inputs.append(_inputs) # Append processed dataset results
         ys.append(_ys)
-        with open(data_ckpt, "wb") as f: # 保存预处理后的数据集
+        with open(data_ckpt, "wb") as f: # Save preprocessed dataset
             pickle.dump((_inputs, _ys), f)
 
     # combine data from different domains (only for training data)
-    sample_cnt_lst = [len(_ys) for _ys in ys] # 每个数据集的句子数 （当前只有一个数据集）
+    sample_cnt_lst = [len(_ys) for _ys in ys] # Number of sentences in each dataset; currently only one dataset
     max_cnt = max(sample_cnt_lst)
     inputs_all, ys_all = [], []
     for _inputs, _ys in zip(inputs, ys):
@@ -292,7 +292,7 @@ def read_ner(datapath, phase, label_list):
         inputs_all.extend(_inputs*ratio) 
         ys_all.extend(_ys*ratio)
 
-    return inputs_all, ys_all # [[],[],...,[]]  还未填充统一长度
+    return inputs_all, ys_all # [[], [], ..., []], not padded to a uniform length yet
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, inputs, ys):
@@ -305,18 +305,18 @@ class Dataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.X)
 
-def collate_fn(data): # 长截短填s
+def collate_fn(data): # Truncate long sequences and pad short ones
     X, y = zip(*data)
-    lengths = [len(bs_x) for bs_x in X] # 一个batch的句子长度
-    max_lengths = max(lengths) # 最大长度
-    padded_seqs = torch.LongTensor(len(X), max_lengths).fill_(auto_tokenizer.pad_token_id) # 填充token 的id=0
-    padded_y = torch.LongTensor(len(X), max_lengths).fill_(pad_token_label_id) # 填充token对应的label索引-100
+    lengths = [len(bs_x) for bs_x in X] # Sentence lengths in one batch
+    max_lengths = max(lengths) # Maximum length
+    padded_seqs = torch.LongTensor(len(X), max_lengths).fill_(auto_tokenizer.pad_token_id) # Pad token id = 0
+    padded_y = torch.LongTensor(len(X), max_lengths).fill_(pad_token_label_id) # Pad token label index = -100
     for i, (seq, y_) in enumerate(zip(X, y)):
         length = lengths[i]
         padded_seqs[i, :length] = torch.LongTensor(seq)
         padded_y[i, :length] = torch.LongTensor(y_)
 
-    if max_lengths>max_seq_length: # 序列长度>512   直接截断
+    if max_lengths>max_seq_length: # Sequence length > 512; truncate directly
         padded_seqs, padded_y = padded_seqs[:,:max_seq_length], padded_y[:,:max_seq_length],
 
     return padded_seqs, padded_y
@@ -421,14 +421,14 @@ class NER_dataloader():
 
         self.batch_size = batch_size
         self.is_filter_O = is_filter_O # False
-        self.auto_tokenizer = auto_tokenizer # Bert 分词器 切分子词
+        self.auto_tokenizer = auto_tokenizer # BERT tokenizer for subword splitting
         self.schema = schema # BIO
         self.is_load_disjoin_train = is_load_disjoin_train # True
 
         # Get entity list
         if entity_list=="" or entity_list==[]:
             logger.info('Loading the default entity list from domain %s...'%domain_name)
-            self.entity_list = domain2entity[domain_name] # 获取数据集的 实体集合
+            self.entity_list = domain2entity[domain_name] # Get the entity set of the dataset
         else:
             logger.info('Loading the pre-defined entity list...')
             entity_list = eval(entity_list)
@@ -436,23 +436,23 @@ class NER_dataloader():
             self.entity_list = entity_list
 
         # Get label list
-        # 得到标签集合  1+entity*2
+        # Get label set: 1 + entity * 2
         self.label_list = get_default_label_list(self.entity_list, schema=self.schema)
-        self.O_index = self.label_list.index('O') # O标签对应的索引 0
+        self.O_index = self.label_list.index('O') # Index of O label, 0
         logger.info('label_list = %s'%str(self.label_list))
 
         # Load data
         logger.info("Load training set data")
         if self.is_load_disjoin_train: # True
             if isinstance(data_path,list):
-                # 划分好的训练集路径
+                # Path of the split training set
                 train_data_ckpt = os.path.join(data_path[0],'train_fg_%d_pg_%d.pth'%(params.nb_class_fg,params.nb_class_pg))
                 # train_data_ckpt = os.path.join(data_path[0],'train_fg_%d_pg_%d_random.pth'%(params.nb_class_fg,params.nb_class_pg))
             else:
                 train_data_ckpt = os.path.join(data_path,'train_fg_%d_pg_%d.pth'%(params.nb_class_fg,params.nb_class_pg))
                 # train_data_ckpt = os.path.join(data_path,'train_fg_%d_pg_%d_random.pth'%(params.nb_class_fg,params.nb_class_pg))
             logger.info('Loading data from %s...'%train_data_ckpt)
-            # 读取划分好的训练集
+            # Read split training set
             with open(train_data_ckpt, "rb") as f:
                 inputs_train_dict, y_train_dict = pickle.load(f)
             self.inputs_train_dict, self.y_train_dict = inputs_train_dict, y_train_dict
@@ -480,11 +480,11 @@ class NER_dataloader():
         else:
             raise Exception('Data_path should be either a list or string!!!')
 
-        logger.info("Load development set data") # 读取预处理开发集 
+        logger.info("Load development set data") # Read preprocessed development set
         inputs_dev, y_dev = read_ner(target_data_path, 
                                     phase="dev", 
                                     label_list=self.label_list)
-        logger.info("Load test set data") # 读取预处理测试集 
+        logger.info("Load test set data") # Read preprocessed test set
         inputs_test, y_test = read_ner(target_data_path,
                                     phase="test",
                                     label_list=self.label_list)
@@ -515,26 +515,26 @@ class NER_dataloader():
 
         if 'train' in phase:
             if self.is_load_disjoin_train: # True
-                # 每个划分下的 输入句子 和 输出label
+                # Input sentences and output labels under each split
                 inputs_train_dict, y_train_dict = deepcopy(self.inputs_train_dict), deepcopy(self.y_train_dict)
             else:
                 inputs_train, y_train = deepcopy(self.inputs_train), deepcopy(self.y_train)
-        if 'dev' in phase: # 全部预处理完成的验证集
+        if 'dev' in phase: # Fully preprocessed validation set
             inputs_dev, y_dev = deepcopy(self.inputs_dev), deepcopy(self.y_dev)
-        if 'test' in phase:# 全部预处理完成的测试集
+        if 'test' in phase:# Fully preprocessed test set
             inputs_test, y_test = deepcopy(self.inputs_test), deepcopy(self.y_test)
 
-        if first_N_classes!=-1 or select_entity_list!=[]: # first_N_classes 截至当前任务的实体数量; select_entity_list 当前任务的 实体集合
+        if first_N_classes!=-1 or select_entity_list!=[]: # first_N_classes: entity count up to current task; select_entity_list: entity set of current task
             # Get choosen label index corresponding to the original label list
-            select_label_list = [] # 第一次是当前任务的标签集合；第二次是截至当前任务的标签集合
+            select_label_list = [] # First use: label set of current task; second use: label set up to current task
             select_label_list.append('O')
             if first_N_classes!=-1:
                 assert  first_N_classes>0 and first_N_classes<=len(self.entity_list), "Invalid value of first_N_classes!!!"
                 # logger.info("Select first %d classes: %s"%(first_N_classes,str(self.entity_list[:first_N_classes])))    
-                for e in self.entity_list[:first_N_classes]: # 遍历截至当前任务的所有实体
+                for e in self.entity_list[:first_N_classes]: # Iterate over all entities up to the current task
                     if self.schema == 'IO':
                         select_label_list.append('I-'+str(e))  
-                    elif self.schema == 'BIO': # 实体转换标签
+                    elif self.schema == 'BIO': # Convert entity to labels
                         select_label_list.append('B-'+str(e))
                         select_label_list.append('I-'+str(e)) 
                     elif self.schema == 'BIOES':
@@ -542,12 +542,12 @@ class NER_dataloader():
                         select_label_list.append('I-'+str(e)) 
                         select_label_list.append('E-'+str(e)) 
                         select_label_list.append('S-'+str(e)) 
-            elif select_entity_list!=[]: # 当前任务的实体集合
+            elif select_entity_list!=[]: # Entity set of current task
                 # logger.info("Select classes in %s !"%str(select_entity_list))
-                for e in select_entity_list: # 遍历当前任务的每个实体 (按数据集对应实体的默认顺序)
+                for e in select_entity_list: # Iterate over each entity in the current task, following the dataset's default entity order
                     if self.schema == 'IO':
                         select_label_list.append('I-'+str(e))  
-                    elif self.schema == 'BIO': # 实体转换 label
+                    elif self.schema == 'BIO': # Convert entity to labels
                         select_label_list.append('B-'+str(e))
                         select_label_list.append('I-'+str(e)) 
                     elif self.schema == 'BIOES':
@@ -555,13 +555,13 @@ class NER_dataloader():
                         select_label_list.append('I-'+str(e)) 
                         select_label_list.append('E-'+str(e)) 
                         select_label_list.append('S-'+str(e)) 
-            select_label_index = [self.label_list.index(l) for l in select_label_list] # label转索引
+            select_label_index = [self.label_list.index(l) for l in select_label_list] # Convert labels to indices
             # Map the label to the seen class index
             if self.is_load_disjoin_train and 'train' in phase:
-                select_label_index_wo_O = list(set(select_label_index)-set([0])) # 去掉O
+                select_label_index_wo_O = list(set(select_label_index)-set([0])) # Remove O
                 assert set(select_label_index_wo_O)==set(list(range(np.min(select_label_index_wo_O), np.max(select_label_index_wo_O)+1)))
-                # 标签索引 转 实体索引
-                # 当前任务 实体索引的范围
+                # Convert label indices to entity indices
+                # Entity index range of the current task
                 entity_index_min = (np.min(select_label_index_wo_O)-1)//(len(self.schema)-1)
                 entity_index_max = np.max(select_label_index_wo_O)//(len(self.schema)-1)-1
 
@@ -571,7 +571,7 @@ class NER_dataloader():
                 assert list(inputs_train_dict.keys())==list(y_train_dict.keys())
 
                 # add reserved samples
-                if reserved_ratio>0: # 保存样本
+                if reserved_ratio>0: # Save samples
                     entity_idx_bg, entity_idx_ed = 0, -1
                     while entity_idx_ed!=entity_index_min-1:
                         is_find = False
@@ -592,26 +592,26 @@ class NER_dataloader():
                         y_train.extend(tmp_y_train)
                         entity_idx_bg = entity_idx_ed+1
 
-                # no reserved sample 不保存样本
+                # No reserved samples
                 entity_idx_bg, entity_idx_ed = entity_index_min, -1
                 while entity_idx_ed!=entity_index_max:
                     is_find = False
-                    for split_name in split_name_list: # 遍历划分的名字 找到当前任务对应的划分
+                    for split_name in split_name_list: # Iterate over split names to find the split corresponding to the current task
                         if str(entity_idx_bg)+'_' in split_name:
                             entity_idx_ed = eval(split_name.split('_')[1])
                             is_find = True
                             break
                     assert is_find
                     tmp_split_name = '%d_%d'%(entity_idx_bg, entity_idx_ed)
-                    # 对应划分的数据
+                    # Data from the corresponding split
                     inputs_train.extend(inputs_train_dict[tmp_split_name])
                     tmp_y_train = y_train_dict[tmp_split_name]
 
                     # change the annotation
                     if params.extra_annotate_type=='none':
-                        # 当前任务 对应的 label集合 除去0
+                        # Label set corresponding to the current task, excluding 0
                         tmp_select_label_list = list(range(1+entity_idx_bg*(len(params.schema)-1), 1+(entity_idx_ed+1)*(len(params.schema)-1)))
-                        # 把当前任务之外的label 全部设置为0 (预处理的时候没有处理，训练之前需要更新一下)
+                        # Set all labels outside the current task to 0; this is not handled during preprocessing and must be updated before training
                         tmp_y_train = self.set_unseen_labels_to_O(tmp_y_train, tmp_select_label_list)
                     elif params.extra_annotate_type=='current':
                         tmp_select_label_list = list(range(1+entity_index_min*(len(params.schema)-1), 1+(entity_idx_ed+1)*(len(params.schema)-1)))
@@ -622,23 +622,23 @@ class NER_dataloader():
                     else:
                         raise Exception('Invalid extra_annotate_type type %s!!!'%(params.extra_annotate_type))
                     y_train.extend(tmp_y_train)
-                    entity_idx_bg = entity_idx_ed+1 # 下一个任务 开始实体索引
+                    entity_idx_bg = entity_idx_ed+1 # Starting entity index of the next task
 
             if not is_ground_truth_train and 'train' in phase:
-                for i, y_lst in enumerate(y_train): # 遍历每个句子的标签序列
+                for i, y_lst in enumerate(y_train): # Iterate over each sentence's label sequence
                     for j, y in enumerate(y_lst):
                         if y in [pad_token_label_id, self.label_list.index('O')]: # -100 0
                             continue
-                        if not y in select_label_index: # 非当前任务的label索引 替换为0
+                        if not y in select_label_index: # Replace label indices outside the current task with 0
                             y_train[i][j] = self.label_list.index('O')
-            if 'dev' in phase:# 在所有句子上验证，第一次把非当前任务的label索引 替换为0；   第二次把非截至当前任务的label索引 替换为0
+            if 'dev' in phase:# Validate on all sentences; first replace labels outside the current task with 0, then labels outside seen tasks with 0
                 for i, y_lst in enumerate(y_dev):
                     for j, y in enumerate(y_lst):
                         if y in [pad_token_label_id, self.label_list.index('O')]:
                             continue
                         if not y in select_label_index:
                             y_dev[i][j] = self.label_list.index('O')
-            if 'test' in phase: # 在所有句子上测试，把非截至当前任务的label索引 替换为0
+            if 'test' in phase: # Test on all sentences and replace labels outside seen tasks with 0
                 for i, y_lst in enumerate(y_test):
                     for j, y in enumerate(y_lst):
                         if y in [pad_token_label_id, self.label_list.index('O')]:
@@ -648,7 +648,7 @@ class NER_dataloader():
         else:
             logger.info("Select all classes for training !")
 
-        # Filter out all sentences contains ONLY O labels (不过滤)
+        # Filter out all sentences containing ONLY O labels (disabled)
         filter_label_list = []
         for filter_entity in filter_entity_list: #filter_entity_list=[]
             if 'B-'+filter_entity in self.label_list:

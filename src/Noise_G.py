@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.nn.parameter import Parameter
 from sklearn.metrics import confusion_matrix
-from seqeval.metrics import f1_score # 序列标注评估工具
+from seqeval.metrics import f1_score # Sequence labeling evaluation tool
 from transformers import AutoTokenizer
 import pdb
 
@@ -31,7 +31,7 @@ pad_token_label_id = nn.CrossEntropyLoss().ignore_index  # -100
 class Noise_G_model(object):
     def __init__(self, params, refer_model, label_list, input_dim, num_heads, dropout, num_layers):
         # parameters
-        self.params = params # 配置
+        self.params = params # Configuration
         self.label_list = label_list
         self.refer_model = refer_model
         self.noise_model = nn.TransformerEncoder(
@@ -64,7 +64,7 @@ class Noise_G_model(object):
 
     #     # classification loss
     #     ce_loss = nn.CrossEntropyLoss()(self.logits.view(-1, self.logits.shape[-1]),
-    #                             labels.flatten().long()) # bs*seq_len, out_dim 默认自动忽略-100 label （pad、cls、sep、第二子词对应的索引）
+    #                             labels.flatten().long()) # bs*seq_len, out_dim; ignores -100 labels by default (pad, cls, sep, and later subword indices)
     #     self.loss = ce_loss
     #     return ce_loss.item()
 

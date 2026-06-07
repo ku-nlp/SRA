@@ -150,7 +150,7 @@ def compute_feature_by_dataloader(dataloader, feature_model, select_label_groups
     with torch.no_grad():
         for inputs, targets in dataloader:
             inputs = inputs.cuda() # (bsz, seq_len)
-            inputs_feature = feature_model(inputs)[1][-1].cpu() # 最后一层的特征 (bsz, seq_len, hidden_dim)
+            inputs_feature = feature_model(inputs)[1][-1].cpu() # Last-layer features (bsz, seq_len, hidden_dim)
             if num_groups>0:
                 for i in range(num_groups):
                     select_mask = torch.zeros_like(targets) # (bsz, seq_len)
@@ -164,7 +164,7 @@ def compute_feature_by_dataloader(dataloader, feature_model, select_label_groups
 
     if num_groups>0:
         for i in range(num_groups):
-            return_feature_groups[i] = torch.cat(return_feature_groups[i], dim=0) # 0: (标注为当前任务label的token数量,hidden_dim) 1: (标注为0的token数量,hidden_dim)
+            return_feature_groups[i] = torch.cat(return_feature_groups[i], dim=0) # 0: (tokens labeled with current-task labels, hidden_dim) 1: (tokens labeled 0, hidden_dim)
         if is_normalize:
             for i in range(num_groups):
                 return_feature_groups[i] = F.normalize(return_feature_groups[i], p=2, dim=-1)
@@ -236,8 +236,8 @@ def get_match_id(flatten_feat_train, top_k, max_samples=5000):
             - match_id: a list has dims (num_samples*top_k) 
             and it represents the ids of the nearest samples of each sample.
     '''
-    num_samples_all = flatten_feat_train.shape[0] # 当前任务训练数据中标注为当前任务label的token数量
-    if num_samples_all>max_samples: # 提升效率
+    num_samples_all = flatten_feat_train.shape[0] # Number of tokens labeled with current-task labels in the training data
+    if num_samples_all>max_samples: # Improve efficiency
         # 2.1. calculate the L2 distance inside z0
         dist_z =  scipy.spatial.distance.cdist(flatten_feat_train,
                                 flatten_feat_train[:max_samples],
@@ -248,15 +248,15 @@ def get_match_id(flatten_feat_train, top_k, max_samples=5000):
                                 min=0)
     else:
         # 2.1. calculate the L2 distance inside z0        
-        # (当前任务训练数据中标注为当前任务label的token数量, 当前任务训练数据中标注为当前任务label的token数量) 
-        # 基于这些token的特征两两计算距离   
+        # (number of tokens labeled with current-task labels, number of tokens labeled with current-task labels)
+        # Compute pairwise distances based on these token features
         dist_z = pdist(flatten_feat_train, squared=False) 
         # 2.2. calculate distance mask: do not use itself
         mask_input = torch.clamp(torch.ones_like(dist_z)-torch.eye(num_samples_all), min=0)
     # 2.3 find the image meets label requirements with nearest old feature
     mask_input = mask_input.float() * dist_z
-    mask_input[mask_input == 0] = float("inf") # 自身距离设置为无穷 排除自身
-    match_id = torch.flatten(torch.topk(mask_input, top_k, largest=False, dim=1)[1]) # 每个token 找自己特征最相似的其他 三个token 返回id
+    mask_input[mask_input == 0] = float("inf") # Set self-distance to infinity to exclude itself
+    match_id = torch.flatten(torch.topk(mask_input, top_k, largest=False, dim=1)[1]) # For each token, return ids of the top-k most similar other tokens
 
     # Show the average distance
     # topk_value = torch.topk(dist_z, k=top_k, largest=False, dim=1)[0][:,1:]
@@ -272,8 +272,8 @@ def get_flatten_for_nested_list(all_label_train, select_labels, is_return_pos_ma
         and a position matrix. 
         
         Params:
-            - all_label_train: a nested list and each element is the token label  2维列表
-            - select_labels: a list indicates the select labels  当前任务的label集合
+            - all_label_train: a nested list and each element is the token label
+            - select_labels: a list indicates the selected labels for the current task
             - is_return_pos_matrix: if return the pos matirx of each select element,
             e.g., [[1,4],[1,5],[2,1],[2,2],...]
             - max_seq_length: the longest length for each sentence
@@ -287,8 +287,8 @@ def get_flatten_for_nested_list(all_label_train, select_labels, is_return_pos_ma
     for i,s in enumerate(all_label_train):
         if len(s)>max_seq_length:
             s=s[:max_seq_length]
-        mask_4_sent = np.isin(s, select_labels) # s中的label 是否在select_labels中，在为true
-        pos_4_sent = np.where(mask_4_sent)[0] # 返回true的位置
+        mask_4_sent = np.isin(s, select_labels) # True if labels in s are in select_labels
+        pos_4_sent = np.where(mask_4_sent)[0] # Return true positions
         flatten_list.extend(np.array(s)[mask_4_sent])
         if is_return_pos_matrix and len(pos_4_sent)>0:
             pos_matrix.append(np.array([[i,j] for j in pos_4_sent]))

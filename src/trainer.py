@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.nn.parameter import Parameter
 from sklearn.metrics import confusion_matrix
-from seqeval.metrics import f1_score # 序列标注评估工具
+from seqeval.metrics import f1_score # Sequence labeling evaluation tool
 from transformers import AutoTokenizer
 import pdb
 
@@ -31,7 +31,7 @@ pad_token_label_id = nn.CrossEntropyLoss().ignore_index  # -100
 class BaseTrainer(object):
     def __init__(self, params, model, label_list):
         # parameters
-        self.params = params # 配置
+        self.params = params # Configuration
         self.model = model 
         self.label_list = label_list
         
@@ -64,7 +64,7 @@ class BaseTrainer(object):
 
         # classification loss
         ce_loss = nn.CrossEntropyLoss()(self.logits.view(-1, self.logits.shape[-1]), 
-                                labels.flatten().long()) # bs*seq_len, out_dim 默认自动忽略-100 label （pad、cls、sep、第二子词对应的索引）
+                                labels.flatten().long()) # bs*seq_len, out_dim; ignores -100 labels by default (pad, cls, sep, and later subword indices)
         self.loss = ce_loss
         return ce_loss.item() 
 
@@ -83,10 +83,10 @@ class BaseTrainer(object):
                 refer_logits = self.refer_model.forward_classifier(refer_features)# (bsz,seq_len,refer_dims)
 
 
-            mask_bg = labels == 0  # (bsz, seq_len)  找出背景位置
+            mask_bg = labels == 0  # (bsz, seq_len) background positions
             probas = torch.softmax(refer_logits, dim=-1)  # (bsz,seq_len,refer_dims)
 
-            _, pseudo_labels = probas.max(dim=-1) # 最大值 以及 最大值所在位置
+            _, pseudo_labels = probas.max(dim=-1) # Maximum value and its position
 
             bg_entropy_values = entropy(probas)[mask_bg].view(-1)
             bg_entropy_values_total.extend(bg_entropy_values.detach().cpu().numpy().tolist())
@@ -116,7 +116,7 @@ class BaseTrainer(object):
         new_token = labels >= self.old_classes
         old_token = torch.sum(old_token, 1)
         new_token = torch.sum(new_token, 1)
-        new_token[new_token==0] = 1 # 某个样本没有新label 防止除0异常
+        new_token[new_token==0] = 1 # Avoid division by zero when a sample has no new labels
         weight = 0.5 + F.sigmoid(old_token/new_token)
         return weight
 
@@ -151,11 +151,11 @@ class BaseTrainer(object):
         
 
         classif_adaptive_factor = 1.0
-        mask_background = (labels < self.old_classes) & (labels != pad_token_label_id) # 0 的位置
+        mask_background = (labels < self.old_classes) & (labels != pad_token_label_id) # Positions labeled 0
 
   
         probs = torch.softmax(refer_logits, dim=-1) # (bsz,seq_len,refer_dims)
-        _, pseudo_labels = probs.max(dim=-1) # 最大概率 以及 最大概率所在位置
+        _, pseudo_labels = probs.max(dim=-1) # Maximum probability and its position
 
         mask_valid_pseudo = entropy(probs) < self.thresholds[pseudo_labels] # (bsz, seq_len)
 
@@ -180,7 +180,7 @@ class BaseTrainer(object):
             if self.params.classif_adaptive_min_factor:
                 classif_adaptive_factor = classif_adaptive_factor.clamp(min=self.params.classif_adaptive_min_factor)
 
-        loss = nn.CrossEntropyLoss(reduction='none')(self.logits.permute(0,2,1), labels) # 0 新类 旧类伪标签 -100(计算的loss为0)    (bsz,seq_len)
+        loss = nn.CrossEntropyLoss(reduction='none')(self.logits.permute(0,2,1), labels) # 0, new classes, old-class pseudo labels, and -100 (loss is 0); (bsz, seq_len)
         loss = classif_adaptive_factor * loss
 
         # type balance
@@ -188,7 +188,7 @@ class BaseTrainer(object):
         pre_sample_weights = self.calculate_sample_weight(labels)
         sample_weights = torch.ones(loss.size()).cuda() 
         for i in range(pre_sample_weights.size(0)): 
-            sample_weights[i][(labels[i] > 0) & (labels[i] < self.old_classes)] = pre_sample_weights[i] # 样本中 被伪标注出来的旧类token 赋予 计算的权重， 其他（新类，真正的背景）token对应权重1
+            sample_weights[i][(labels[i] > 0) & (labels[i] < self.old_classes)] = pre_sample_weights[i] # Assign computed weights to pseudo-labeled old-class tokens; other tokens keep weight 1
 
   
         loss = sample_weights * loss
@@ -271,7 +271,7 @@ class BaseTrainer(object):
         else:
             raise Exception('Invalid %s'%(params.adaptive_schedule))
 
-        self.loss = ce_loss + distill_loss_coefficient*distill_loss # 总loss
+        self.loss = ce_loss + distill_loss_coefficient*distill_loss # Total loss
 
         return ce_loss.item(), distill_loss_coefficient*distill_loss.item()
 
@@ -340,7 +340,7 @@ class BaseTrainer(object):
             for pred_index, gold_index in zip(pred_list, y_list):
                 gold_index = int(gold_index)
                 if gold_index != pad_token_label_id: # !=-100
-                    pred_token = self.label_list[pred_index] # label索引转label
+                    pred_token = self.label_list[pred_index] # Convert label index to label
                     gold_token = self.label_list[gold_index]
                     # lines.append("w" + " " + pred_token + " " + gold_token)
                     pred_line.append(pred_token) 
@@ -367,7 +367,7 @@ class BaseTrainer(object):
             f1 = f1_score([gold_line], [pred_line])*100
             # macro f1 (average of each class f1)
             ma_f1 = f1_score([gold_line], [pred_line], average='macro')*100
-            if not each_class: # 不打印每个类别的f1
+            if not each_class: # Do not print F1 for each class
                 return f1, ma_f1
 
             # compute f1 score for each class

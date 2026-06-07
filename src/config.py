@@ -14,7 +14,7 @@ def get_params():
     parser.add_argument("--debug", default=False, action="store_true", help="if skipping the test on training and validation set")
     
     # Config
-    parser.add_argument("--cfg", default="./config/default.yaml", help="Hyper-parameters") # 超参数配置文件
+    parser.add_argument("--cfg", default="./config/default.yaml", help="Hyper-parameters") # Hyper-parameter config file
 
     # Path
     parser.add_argument("--exp_name", type=str, default="default", help="Experiment name")
@@ -98,9 +98,9 @@ def get_params():
     parser.add_argument("--temperature", type=int, default=1, help="temperature of the student model")
     parser.add_argument("--ref_temperature", type=int, default=1, help="temperature of the teacher model")
     
-    params = parser.parse_args() # 默认配置
+    params = parser.parse_args() # Default configuration
 
-    with open(params.cfg) as f: # 读取yaml文件 进行配置覆盖
+    with open(params.cfg) as f: # Read the yaml file and override configuration
         config = yaml.safe_load(f)
         for k, v in config.items():
             # for parameters set in the args

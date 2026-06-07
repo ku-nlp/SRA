@@ -20,15 +20,15 @@ class BertTagger(nn.Module):
         super(BertTagger, self).__init__()
         self.hidden_dim = params.hidden_dim # 768
         self.output_dim = output_dim # curr_entity*2 +1 
-        config = AutoConfig.from_pretrained(params.model_name) # 加载配置
-        config.output_hidden_states = True # 输出每个token的表示
-        config.output_attentions = True # 输出每个token的attention map
+        config = AutoConfig.from_pretrained(params.model_name) # Load configuration
+        config.output_hidden_states = True # Output each token representation
+        config.output_attentions = True # Output each token attention map
         self.encoder = AutoModelWithLMHead.from_pretrained(params.model_name, config=config)
         if params.ckpt: # False
             logger.info("Reloading encoder from %s" % params.ckpt)
             encoder_ckpt = torch.load(params.ckpt)
             self.encoder.load_state_dict(encoder_ckpt)
-        # 分类器
+        # Classifier
         self.classifier = CosineLinear(self.hidden_dim, self.output_dim)
 
 
@@ -52,7 +52,7 @@ class BertTagger(nn.Module):
         fea = self.encoder.bert.encoder(attack_Emb, output_attentions=True,output_hidden_states=True)
 
         # features = self.encoder(X) 
-        features = fea[1][-1] # 最后一层特征(bsz, seq_len, hidden_dim)    features[1] 包括所有层的特征 
+        features = fea[1][-1] # Last-layer features (bsz, seq_len, hidden_dim); features[1] contains features from all layers
         return features
 
     def forward_classifier(self, features):
@@ -128,4 +128,3 @@ class SplitCosineLinear(nn.Module):
         if self.sigma is not None:
             out = self.sigma * out
         return out
-
